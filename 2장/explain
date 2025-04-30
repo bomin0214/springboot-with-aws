@@ -1,0 +1,168 @@
+# 1. 테스트 코드 소개 → TDD
+
+**TDD**와 **단위 테스트**(Unit Test)는 다르다.
+
+테스트 코드를 먼저 작성해야함.
+
+![image.png](attachment:f077c2da-e1f2-421b-8eab-d8ead5b402a0:image.png)
+
+- Red: 항상 실패하는 테스트를 먼저 작성하고
+- Green: 테스트가 통과하는 프로덕션 코드를 작성하고
+    - "프로덕션(Production)"은 소프트웨어 개발에서 **사용자에게 실제로 제공되는 운영 환경.**
+    - 즉, 개발이 끝난 프로그램이 **실제 서비스되고 있는 상태나 환경**
+- Refactor 테스트가 통과하면 프로덕션 코드를 리팩토
+    - "리팩토링(Refactoring)"은 **기존 코드의 기능은 변경하지 않으면서, 내부 구조를 개선하는 작업**
+    - **Before (리팩토링 전):**
+        
+        ```java
+        int a = 10000;
+        double b = a * 0.1;
+        System.out.println("할인 금액은 " + b + "원입니다.");
+        ```
+        
+    - **After (리팩토링 후):**
+        
+        ```java
+        int price = 10000;
+        double discountRate = 0.1;
+        double discountAmount = price * discountRate;
+        System.out.println("할인 금액은 " + discountAmount + "원입니다.");
+        ```
+        
+
+## 1.1 Unit Test
+
+- 단위 테스트는 개발 단계 초기에 문제를 발견하는데 도움을 준다
+- 개발자가 나중에 코드를 리팩토링 하거나 라이브러리 업그레이드 등에서 기존 기능이 올바르게 작동하는지 확인할 수 있다.
+- 단위 테스트는 기능에 대한 불확실성을 감소 시킨다.
+- 시스템에 대한 실제 문서를 제공한다. 단위 테스트 자체가 문서로 사용할 수 있다.
+
+## 1.2 WAS
+
+Web Application Server
+
+> 내장 WAS
+> 
+
+외부에 AWS를 두지 않고 애플리케이션을 실행할 때 `내부에서` WAS를 실행하는 것. → 항상 서버에 Tomcat을 설치할 필요가 없게 되고, 스프링 부트로 만들어진 Jar 파일로 실행하면 된다.
+
+언제 어디서나 같은 환경에서 스프링 부트를 배포할 수 있다.
+
+> 외장 WAS
+> 
+
+모든 서버는 WAS의 종류와 버전, 설정을 일치 시켜야만 한다.
+
+# 2. 실습
+
+## 2.1 Controller
+
+```java
+@RestController
+public class HelloController {
+
+    @GetMapping("/hello")
+    public String hello(){
+        return "hello";
+    }
+}
+```
+
+- RestController: controller → JSON으로 반환해준다. 예전에는 @RequestBody를 통해 각 메소드마다 선언해 주었지만, 이제는 한 번에 사용할 수 있게 해줌
+
+## 2.2 test작성
+
+Junit4 사용
+
+```java
+@RunWith(SpringRunner.class) 
+@WebMvcTest(controllers = HelloControllerTest.class)
+public class HelloControllerTest {
+    
+    @Autowired
+    private MockMvc mvc;
+    
+    @Test
+    public void hello가_리턴된다() throws Exception{
+        String hello = "hello";
+        mvc.perform(get("/hello"))
+                .andExpect(status().isOk())
+                .andExpect(content().string(hello));
+    }
+}
+```
+
+- **@RunWith**: 테스트 진행할 때 Junit에 내장된 실행자**(SpringRunner)** 외에 다른 실행자를 실행시킨다.
+- **@WebMvcTest**: Web (Mvc)에 집중하는 어노테이션. @Controller나 @ControllerAdvice 사용 가능, 하지만 빈 관련 @Service, @Component, @Repository는 **사용할 수 없다**. 여기서는 컨트롤러만 선언하기 때문
+- **@Autowired**: Bean
+- private MockMvc mvc: 웹 API 테스트 할 때 사용, mvc 시작점. 이 클래스를 통해 http get, post 테스트 할 수 있음.
+- `throws Exception`은 **MockMvc** 수행 중 예외가 발생할 수 있다는 것을 의미.
+- mvc.perform(get(”hello”)): mvc를 이용해 http get요청을 hello로 보냄.
+- and Expect(status().isOk()) → 200K
+- and Expect(content.string(hello)); : body의 문자열이 hello와 같아야 한다.
+
+## 2.3 dto
+
+```java
+@Getter
+@RequiredArgsConstructor
+public class HelloResponseDto {
+    private final String name;
+    private final int amount;
+}
+```
+
+- @RequiredArgsContstructor : `final`이나 `@NonNull`이 붙은 필드만을 파라미터로 받는 생성자
+
+## 2.4 dto test 작성
+
+```java
+public class HelloResponseDtoTest {
+    @Test
+    public void lomboktest(){
+        String name = "김보민";
+        int amount = 0;
+
+        HelloResponseDto dto = new HelloResponseDto(name, amount);
+
+        assertThat(dto.getName()).isEqualTo(name);
+        assertThat(dto.getAmount()).isEqualTo(amount);
+    }
+}
+```
+
+→ 성공
+
+## 2.5 controller에 dto 추가
+
+```java
+@RestController
+public class HelloController {
+    @GetMapping("/hello/dto")
+    public HelloResponseDto helloResponseDto(@RequestParam("name") String name, @RequestParam("amount") int amount){
+        return new HelloResponseDto(name,amount);
+    }
+}
+```
+
+- @RequestParam: 외부에서 API로 넘긴 파라미터를 가져오는 어노테이션. 외부에서 name (@RequestParam(”name”))이란 이름으로 넘긴 파라미터를 메소드 파라미터 name(String name)에 저장하게 된다.
+
+## 2.6 controller에 dto 추가한 것 test
+
+```java
+@Test
+    public void hellodto()throws Exception{
+        String name = "name";
+        int amount=1000;
+        
+        mvc.perform(get("/hello/dto")
+                            .param("name", name)
+                            .param("amount", String.valueOf(amount)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.name", is(name)))
+                .andExpect(jsonPath("$.amount", is(amount)));
+    }
+```
+
+- **param**: api 테스트할 때 사용될 요청 파라미터를 설정한다. String 값만 허용됨.
+- **jsonPath**: json 응답값을 필드별로 검증할 수 있는 메소드. $로 필드명.
